@@ -234,12 +234,15 @@ function createAgentRunner({ ctx, rootAbs, readAuto, logger }) {
     const sampleTimer = setInterval(samplePump, 300)
     if (typeof sampleTimer.unref === 'function') sampleTimer.unref()
     try {
-      // 回合来源 plugin + 完整消息形状（dsh-tasks 同款）；kind:'user' 在插件上下文会被静默丢弃
+      // 回合来源 producer-owned + 完整消息形状；kind:'user' 在插件上下文会被静默丢弃。
+      // v3 裸包装 {kind:'plugin', plugin:'dsh-kb'} 在 format v4 宿主写路径抛
+      // SessionFormatError("format v4 message requires a producer-owned source kind")
+      // ——自动蒸馏每次入队必失败（dsh-kb#1），必须用生产者自有写法 kind:'plugin:<名>'
       agent.followup({
         id: randomUUID(),
         role: 'user',
         content: [{ type: 'text', text: queueCore.buildDistillPrompt(item, kbRoot) }],
-        source: { kind: 'plugin', plugin: 'dsh-kb' },
+        source: { kind: 'plugin:dsh-kb' },
       })
       logger.info(`dsh-kb: [${item.id}] followup 已发，等 whenIdle…`)
       await agent.whenIdle()
@@ -353,7 +356,7 @@ function createFeedbackWorker({ ctx, readAuto, logger }) {
       id: randomUUID(),
       role: 'user',
       content: [{ type: 'text', text: queueCore.buildFeedbackPrompt(t) }],
-      source: { kind: 'plugin', plugin: 'dsh-kb' },
+      source: { kind: 'plugin:dsh-kb' },
     })
     logger.info(`dsh-kb: [${t.runId}] 反馈已发常驻会话，处理 ${t.rel}`)
     // 超时保护：超时视为失败并弃用会话（下个任务重建），避免 busy 卡死
